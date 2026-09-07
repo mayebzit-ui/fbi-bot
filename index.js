@@ -2,7 +2,12 @@ const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
 require('dotenv').config();
 
 const client = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildVoiceStates]
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildVoiceStates
+    ]
 });
 
 client.on('messageCreate', async message => {
@@ -67,9 +72,13 @@ client.on('messageCreate', async message => {
             return;
         }
 
+        if (target.voice.channelID === destination.id) {
+            return message.channel.send(`${target.user.username} is already in <#${destination.id}> 🎧`);
+        }
+
         try {
             await target.voice.setChannel(destination);
-            message.channel.send(`Moved ${target.user.username} to **${destination.name}** ✅`);
+            message.channel.send(`Moved ${target.user.username} to <#${destination.id}> ✅`);
         } catch {
             message.channel.send('I don\'t have permission to move them.');
         }

@@ -2,7 +2,7 @@ const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
 require('dotenv').config();
 
 const client = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildVoiceStates]
 });
 
 client.on('messageCreate', async message => {
@@ -34,6 +34,39 @@ client.on('messageCreate', async message => {
             message.channel.send({ embeds: [embed] });
         } else {
             message.channel.send(`${fetchedUser.username} doesn't have a banner (needs Discord Nitro)`);
+        }
+    }
+
+    // Move command
+    if (message.content.startsWith('Aji ')) {
+        const args = message.content.slice(4).trim().split(' ');
+        const target = message.mentions.members.first();
+        const channelName = args.join(' ').replace(/<@!?\d+>/g, '').trim();
+
+        if (!target) {
+            message.channel.send('Usage: `Aji @user channel name`');
+            return;
+        }
+
+        if (!target.voice) {
+            message.channel.send(`${target.user.username} is not in a voice channel.`);
+            return;
+        }
+
+        const channel = message.guild.channels.cache.find(
+            c => c.type === 2 && c.name.toLowerCase() === channelName.toLowerCase()
+        );
+
+        if (!channel) {
+            message.channel.send(`Voice channel "${channelName}" not found.`);
+            return;
+        }
+
+        try {
+            await target.voice.setChannel(channel);
+            message.channel.send(`Moved ${target.user.username} to **${channel.name}** ✅`);
+        } catch {
+            message.channel.send('I don\'t have permission to move them. Make sure I have **Move Members** permission.');
         }
     }
 });

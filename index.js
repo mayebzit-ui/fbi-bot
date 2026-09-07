@@ -12,6 +12,7 @@ const client = new Client({
 
 client.on('messageCreate', async message => {
     if (message.author.bot) return;
+    console.log(message.content);
 
     // Avatar command
     if (message.content === 'a' || message.content.startsWith('a ')) {
@@ -52,13 +53,10 @@ client.on('messageCreate', async message => {
             return;
         }
 
-        // Check if target is in a voice channel
-        const voiceState = message.guild.voice.states.get(target.id);
-        if (!voiceState || !voiceState.channelId) {
+        if (!target.voice.channelID) {
             return message.channel.send(`${target} is not in any voice channel.`);
         }
 
-        // Determine destination
         let destination = channelMention;
         if (!destination) {
             destination = message.member.voice ? message.member.voice.channel : null;
@@ -72,8 +70,7 @@ client.on('messageCreate', async message => {
             return message.channel.send('That\'s not a voice channel.');
         }
 
-        // Check if already in destination
-        if (voiceState.channelId === destination.id) {
+        if (target.voice.channelID === destination.id) {
             return message.channel.send(`${target} is already in <#${destination.id}> 🎧`);
         }
 

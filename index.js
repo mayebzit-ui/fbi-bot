@@ -2,17 +2,11 @@ const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
 require('dotenv').config();
 
 const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildVoiceStates
-    ]
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildVoiceStates]
 });
 
 client.on('messageCreate', async message => {
     if (message.author.bot) return;
-    console.log(message.content);
 
     // Avatar command
     if (message.content === 'a' || message.content.startsWith('a ')) {
@@ -44,7 +38,7 @@ client.on('messageCreate', async message => {
     }
 
     // Move command
-    if (message.content.startsWith('Aji ') || message.content.startsWith('aji ')) {
+    if (message.content.startsWith('Aji ')) {
         const target = message.mentions.members.first();
         const channelMention = message.mentions.channels.first();
 
@@ -53,8 +47,9 @@ client.on('messageCreate', async message => {
             return;
         }
 
-        if (!target.voice.channelID) {
-            return message.channel.send(`${target} is not in any voice channel.`);
+        if (!target.voice) {
+            message.channel.send(`${target.user.username} is not in a voice channel.`);
+            return;
         }
 
         let destination = channelMention;
@@ -63,20 +58,18 @@ client.on('messageCreate', async message => {
         }
 
         if (!destination) {
-            return message.channel.send('Join a voice channel first or tag one with `#`.');
+            message.channel.send('Either tag a voice channel with `#` or join a voice channel first.');
+            return;
         }
 
         if (destination.type !== 2) {
-            return message.channel.send('That\'s not a voice channel.');
-        }
-
-        if (target.voice.channelID === destination.id) {
-            return message.channel.send(`${target} is already in <#${destination.id}> 🎧`);
+            message.channel.send('That\'s not a voice channel.');
+            return;
         }
 
         try {
             await target.voice.setChannel(destination);
-            message.channel.send(`Moved ${target} to <#${destination.id}> ✅`);
+            message.channel.send(`Moved ${target.user.username} to **${destination.name}** ✅`);
         } catch {
             message.channel.send('I don\'t have permission to move them.');
         }

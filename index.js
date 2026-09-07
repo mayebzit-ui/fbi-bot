@@ -39,12 +39,11 @@ client.on('messageCreate', async message => {
 
     // Move command
     if (message.content.startsWith('Aji ')) {
-        const args = message.content.slice(4).trim().split(' ');
         const target = message.mentions.members.first();
-        const channelName = args.join(' ').replace(/<@!?\d+>/g, '').trim();
+        const channelMention = message.mentions.channels.first();
 
         if (!target) {
-            message.channel.send('Usage: `Aji @user channel name`');
+            message.channel.send('Usage: `Aji @user` or `Aji @user #channel`');
             return;
         }
 
@@ -53,20 +52,26 @@ client.on('messageCreate', async message => {
             return;
         }
 
-        const channel = message.guild.channels.cache.find(
-            c => c.type === 2 && c.name.toLowerCase() === channelName.toLowerCase()
-        );
+        let destination = channelMention;
+        if (!destination) {
+            destination = message.member.voice ? message.member.voice.channel : null;
+        }
 
-        if (!channel) {
-            message.channel.send(`Voice channel "${channelName}" not found.`);
+        if (!destination) {
+            message.channel.send('Either tag a voice channel with `#` or join a voice channel first.');
+            return;
+        }
+
+        if (destination.type !== 2) {
+            message.channel.send('That\'s not a voice channel.');
             return;
         }
 
         try {
-            await target.voice.setChannel(channel);
-            message.channel.send(`Moved ${target.user.username} to **${channel.name}** ✅`);
+            await target.voice.setChannel(destination);
+            message.channel.send(`Moved ${target.user.username} to **${destination.name}** ✅`);
         } catch {
-            message.channel.send('I don\'t have permission to move them. Make sure I have **Move Members** permission.');
+            message.channel.send('I don\'t have permission to move them.');
         }
     }
 });

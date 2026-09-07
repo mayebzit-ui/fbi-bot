@@ -42,42 +42,48 @@ client.on('messageCreate', async message => {
         }
     }
 
-    if (message.content.startsWith('Aji ')) {
-    const target = message.mentions.members.first();
-    const channelMention = message.mentions.channels.first();
+    // Move command
+    if (message.content.startsWith('Aji ') || message.content.startsWith('aji ')) {
+        const target = message.mentions.members.first();
+        const channelMention = message.mentions.channels.first();
 
-    if (!target) {
-        message.channel.send('Usage: `Aji @user` or `Aji @user #channel`');
-        return;
-    }
+        if (!target) {
+            message.channel.send('Usage: `Aji @user` or `Aji @user #channel`');
+            return;
+        }
 
-    let destination = channelMention;
-    if (!destination) {
-        destination = message.member.voice ? message.member.voice.channel : null;
-    }
+        // Check if target is in a voice channel
+        const voiceState = message.guild.voice.states.get(target.id);
+        if (!voiceState || !voiceState.channelId) {
+            return message.channel.send(`${target} is not in any voice channel.`);
+        }
 
-    if (!destination) {
-        message.channel.send('Either tag a voice channel with `#` or join a voice channel first.');
-        return;
-    }
+        // Determine destination
+        let destination = channelMention;
+        if (!destination) {
+            destination = message.member.voice ? message.member.voice.channel : null;
+        }
 
-    if (destination.type !== 2) {
-        message.channel.send('That\'s not a voice channel.');
-        return;
-    }
+        if (!destination) {
+            return message.channel.send('Join a voice channel first or tag one with `#`.');
+        }
 
-    const voiceState = message.guild.voice.states.get(target.id);
-    if (voiceState && voiceState.channelId === destination.id) {
-        return message.channel.send(`${target.user.username} is already in <#${destination.id}> 🎧`);
-    }
+        if (destination.type !== 2) {
+            return message.channel.send('That\'s not a voice channel.');
+        }
 
-    try {
-        await target.voice.setChannel(destination);
-        message.channel.send(`Moved ${target.user.username} to <#${destination.id}> ✅`);
-    } catch {
-        message.channel.send('I don\'t have permission to move them.');
+        // Check if already in destination
+        if (voiceState.channelId === destination.id) {
+            return message.channel.send(`${target} is already in <#${destination.id}> 🎧`);
+        }
+
+        try {
+            await target.voice.setChannel(destination);
+            message.channel.send(`Moved ${target} to <#${destination.id}> ✅`);
+        } catch {
+            message.channel.send('I don\'t have permission to move them.');
+        }
     }
-}   
 });
 
 client.login(process.env.TOKEN);

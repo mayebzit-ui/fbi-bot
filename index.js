@@ -42,47 +42,42 @@ client.on('messageCreate', async message => {
         }
     }
 
-    // Move command
     if (message.content.startsWith('Aji ')) {
-        const target = await message.mentions.members.first().fetch({ force: true });
-        const channelMention = message.mentions.channels.first();
+    const target = message.mentions.members.first();
+    const channelMention = message.mentions.channels.first();
 
-        if (!target) {
-            message.channel.send('Usage: `Aji @user` or `Aji @user #channel`');
-            return;
-        }
-
-        if (!target.voice.channel) {
-            message.channel.send(`${target.user.username} is not in a voice channel.`);
-            return;
-        }
-
-        let destination = channelMention;
-        if (!destination) {
-            destination = message.member.voice ? message.member.voice.channel : null;
-        }
-
-        if (!destination) {
-            message.channel.send('Either tag a voice channel with `#` or join a voice channel first.');
-            return;
-        }
-
-        if (destination.type !== 2) {
-            message.channel.send('That\'s not a voice channel.');
-            return;
-        }
-
-        if (target.voice.channelID === destination.id) {
-            return message.channel.send(`${target.user.username} is already in <#${destination.id}> 🎧`);
-        }
-
-        try {
-            await target.voice.setChannel(destination);
-            message.channel.send(`Moved ${target.user.username} to <#${destination.id}> ✅`);
-        } catch {
-            message.channel.send('I don\'t have permission to move them.');
-        }
+    if (!target) {
+        message.channel.send('Usage: `Aji @user` or `Aji @user #channel`');
+        return;
     }
+
+    let destination = channelMention;
+    if (!destination) {
+        destination = message.member.voice ? message.member.voice.channel : null;
+    }
+
+    if (!destination) {
+        message.channel.send('Either tag a voice channel with `#` or join a voice channel first.');
+        return;
+    }
+
+    if (destination.type !== 2) {
+        message.channel.send('That\'s not a voice channel.');
+        return;
+    }
+
+    const voiceState = message.guild.voice.states.get(target.id);
+    if (voiceState && voiceState.channelId === destination.id) {
+        return message.channel.send(`${target.user.username} is already in <#${destination.id}> 🎧`);
+    }
+
+    try {
+        await target.voice.setChannel(destination);
+        message.channel.send(`Moved ${target.user.username} to <#${destination.id}> ✅`);
+    } catch {
+        message.channel.send('I don\'t have permission to move them.');
+    }
+}   
 });
 
 client.login(process.env.TOKEN);

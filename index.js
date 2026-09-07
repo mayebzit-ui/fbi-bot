@@ -44,7 +44,7 @@ client.on('messageCreate', async message => {
 
     // Move command
     if (message.content.startsWith('Aji ')) {
-        const target = message.mentions.members.first();
+        const target = await message.mentions.members.first().fetch({ force: true });
         const channelMention = message.mentions.channels.first();
 
         if (!target) {
@@ -52,7 +52,7 @@ client.on('messageCreate', async message => {
             return;
         }
 
-        if (!target.voice) {
+        if (!target.voice.channel) {
             message.channel.send(`${target.user.username} is not in a voice channel.`);
             return;
         }

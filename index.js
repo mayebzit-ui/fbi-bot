@@ -88,7 +88,7 @@ client.on('messageCreate', async message => {
             const newName = args.join(' ');
             if (!newName) return message.channel.send('Usage: `.v name Gaming Room`');
             try {
-                await voiceChannel.setName(`🔊 | ${newName}`);
+                await voiceChannel.setName(`?? | ${newName}`);
                 return message.channel.send(`? Channel renamed to **?? | ${newName}**`);
             } catch (err) {
                 return message.channel.send('? Failed to rename channel due to Discord rate limits.');
@@ -196,7 +196,7 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
     if (newState.channelId === SETUP_CHANNEL_ID) {
         try {
             const channel = await guild.channels.create({
-                name: `🔊 | ${member.displayName}'s Room`,
+                name: `[V] ${member.displayName}'s Room`,
                 type: 2, 
                 parent: CATEGORY_ID,
                 permissionOverwrites: [
@@ -209,8 +209,33 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
 
             await member.voice.setChannel(channel);
             tempChannels.set(channel.id, member.id); 
+
+            // --- BUILD THE INTERACTIVE EMBED LAYOUT ---
+            const interfaceEmbed = new EmbedBuilder()
+                .setTitle(`火 ➜ ¡Bienvenido, ${member.displayName}! <3`)
+                .setDescription(
+                    `✨ ➜ **¡Tu Sala Prv está lista!** Gestiona la configuración de tu canal usando la guía de referencia rápida o los botones interactivos que aparecen a continuación...\n\n` +
+                    `🔒 ‖ **Lock / Unlock** ➜ Locks / Unlocks your voice channel\n` +
+                    `📝 ‖ **Name** ➜ Changes your voice channel name\n` +
+                    `\u221E ‖ **Limit** ➜ Sets a slot limit to your channel\n` +
+                    `👤 ‖ **Reject** ➜ Rejects a user from your channel`
+                )
+                .setColor(0x560404) // Custom dark wine red color matching your panel image
+                .setFooter({ text: 'Respect the rules & Follow the Discord TOS • Create Communities' });
+
+            // --- BUILD THE BUTTON ROW CONTROLS ---
+            const row1 = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('vc_lock').setLabel('🔒 Lock').setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId('vc_unlock').setLabel('🔓 Unlock').setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId('vc_rename').setLabel('📝 Rename').setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId('vc_limit').setLabel('👥 Limit').setStyle(ButtonStyle.Secondary)
+            );
+
+            // Transmit interface message straight into the voice channel's integrated chat room
+            await channel.send({ content: `${member}`, embeds: [interfaceEmbed], components: [row1] });
+
         } catch (error) {
-            console.error('Error creating voice room:', error);
+            console.error('Error constructing room panel elements:', error);
         }
     }
 

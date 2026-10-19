@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 require('dotenv').config();
 
 const client = new Client({
@@ -56,142 +56,93 @@ client.on('messageCreate', async message => {
 
         try {
             await target.voice.setChannel(destination);
-            message.channel.send(`Moved ${target.user.username} to **${destination.name}** ?`);
+            message.channel.send(`Moved ${target.user.username} to **${destination.name}** ✅`);
         } catch {
             message.channel.send('I don\'t have permission to move them.');
         }
         return;
     }
 
-    // ================= EXPANDED VOICE CONTROL COMMANDS (.v) =================
+    // ================= BACKUP TEXT COMMANDS (.v) =================
     if (message.content.startsWith('.v ')) {
         const voiceChannel = message.member.voice.channel;
-        
-        if (!voiceChannel) {
-            return message.channel.send('? You must be in your temporary voice channel to use this command.');
-        }
-
-        if (!tempChannels.has(voiceChannel.id)) {
-            return message.channel.send('? This is not a temporary voice channel managed by the bot.');
-        }
+        if (!voiceChannel || !tempChannels.has(voiceChannel.id)) return;
 
         const ownerId = tempChannels.get(voiceChannel.id);
-        if (message.author.id !== ownerId) {
-            return message.channel.send('? Only the channel owner can manage this room.');
-        }
+        if (message.author.id !== ownerId) return message.channel.send('❌ Only the channel owner can manage this room.');
 
         const args = message.content.slice(3).trim().split(/ +/);
         const subCommand = args.shift().toLowerCase();
 
-        // 1. Rename: .v name [text]
         if (subCommand === 'name') {
             const newName = args.join(' ');
-            if (!newName) return message.channel.send('Usage: `.v name Gaming Room`');
-            try {
-                await voiceChannel.setName(`?? | ${newName}`);
-                return message.channel.send(`? Channel renamed to **?? | ${newName}**`);
-            } catch (err) {
-                return message.channel.send('? Failed to rename channel due to Discord rate limits.');
-            }
+            if (!newName) return message.channel.send('Usage: `.v name Room Name`');
+            try { await voiceChannel.setName(`[V] ${newName}`); return message.channel.send(`✨ Renamed to **[V] ${newName}**`); } catch { return message.channel.send('❌ Rate limited by Discord.'); }
         }
 
-        // 2. Limit: .v limit [0-99]
         if (subCommand === 'limit') {
             const limit = parseInt(args);
-            if (isNaN(limit) || limit < 0 || limit > 99) {
-                return message.channel.send('Usage: `.v limit [0-99]` (Use 0 to clear limits)');
-            }
-            try {
-                await voiceChannel.setUserLimit(limit);
-                return message.channel.send(`?? User limit updated to **${limit === 0 ? 'Unlimited' : limit}**.`);
-            } catch (err) {
-                return message.channel.send('? Failed to update user limit.');
-            }
+            if (isNaN(limit) || limit < 0 || limit > 99) return message.channel.send('Usage: `.v limit [0-99]`');
+            try { await voiceChannel.setUserLimit(limit); return message.channel.send(`👥 Limit set to **${limit}**.`); } catch { return message.channel.send('❌ Error changing limit.'); }
         }
 
-        // 3. Reject: .v reject @user
         if (subCommand === 'reject') {
             const target = message.mentions.members.first();
             if (!target) return message.channel.send('Usage: `.v reject @user`');
             try {
-                if (target.voice.channelId === voiceChannel.id) {
-                    await target.voice.setChannel(null);
-                }
+                if (target.voice.channelId === voiceChannel.id) await target.voice.setChannel(null);
                 await voiceChannel.permissionOverwrites.create(target.id, { Connect: false });
-                return message.channel.send(`?? Kicked and locked out ${target.user.username}.`);
-            } catch (err) {
-                return message.channel.send('? Failed to reject user.');
-            }
+                return message.channel.send(`🚫 Kicked and locked out ${target.user.username}.`);
+            } catch { return message.channel.send('❌ Error rejecting user.'); }
         }
-
-        // 4. Lock Channel: .v lock
-        if (subCommand === 'lock') {
-            try {
-                await voiceChannel.permissionOverwrites.create(message.guild.roles.everyone, { Connect: false });
-                return message.channel.send('?? The channel is now **Locked**. Nobody else can join.');
-            } catch (err) {
-                return message.channel.send('? Failed to lock the channel.');
-            }
-        }
-
-        // 5. Unlock Channel: .v unlock
-        if (subCommand === 'unlock') {
-            try {
-                await voiceChannel.permissionOverwrites.create(message.guild.roles.everyone, { Connect: true });
-                return message.channel.send('?? The channel is now **Unlocked**. Anyone can join.');
-            } catch (err) {
-                return message.channel.send('? Failed to unlock the channel.');
-            }
-        }
-
-        // 6. Give Trust / Co-owner Perms: .v trust @user
-        if (subCommand === 'trust') {
-            const target = message.mentions.members.first();
-            if (!target) return message.channel.send('Usage: `.v trust @user`');
-            try {
-                await voiceChannel.permissionOverwrites.create(target.id, { 
-                    ManageChannels: true, 
-                    MoveMembers: true,
-                    Connect: true 
-                });
-                return message.channel.send(`? Granted co-owner/trust permissions to ${target.user.username} for this session.`);
-            } catch (err) {
-                return message.channel.send('? Failed to give permissions to user.');
-            }
-        }
-
-        // 7. Transfer Ownership Permanently: .v transfer @user
-        if (subCommand === 'transfer') {
-            const target = message.mentions.members.first();
-            if (!target) return message.channel.send('Usage: `.v transfer @user`');
-            if (target.id === message.author.id) return message.channel.send('? You already own this channel.');
-            
-            if (target.voice.channelId !== voiceChannel.id) {
-                return message.channel.send('? The new owner must be connected inside your voice room first.');
-            }
-
-            try {
-                tempChannels.set(voiceChannel.id, target.id);
-                await voiceChannel.permissionOverwrites.create(target.id, { ManageChannels: true, MoveMembers: true });
-                await voiceChannel.permissionOverwrites.create(message.author.id, { ManageChannels: null, MoveMembers: null });
-                
-                return message.channel.send(`?? Ownership of this channel has been completely transferred to ${target.user.username}!`);
-            } catch (err) {
-                return message.channel.send('? Failed to complete ownership transfer.');
-            }
-        }
-
-        return message.channel.send('?? **Available settings:** `.v name`, `.v limit`, `.v reject`, `.v lock`, `.v unlock`, `.v trust`, `.v transfer`');
     }
 });
 
-// ================= DYNAMIC VOICE CHANNEL CREATOR =================
+// ================= INTERACTIVE BUTTON TRIGGER HANDLING =================
+client.on('interactionCreate', async interaction => {
+    if (!interaction.isButton()) return;
+
+    const voiceChannel = interaction.member.voice.channel;
+    
+    // Check if user is connected to a dynamic room
+    if (!voiceChannel || !tempChannels.has(voiceChannel.id)) {
+        return interaction.reply({ content: '❌ You must be connected inside your temporary voice channel to use these buttons.', ephemeral: true });
+    }
+
+    // Verify button user is the room creator
+    const ownerId = tempChannels.get(voiceChannel.id);
+    if (interaction.user.id !== ownerId) {
+        return interaction.reply({ content: '❌ Only the creator of this room can click these controls.', ephemeral: true });
+    }
+
+    try {
+        if (interaction.customId === 'vc_lock') {
+            await voiceChannel.permissionOverwrites.create(interaction.guild.roles.everyone, { Connect: false });
+            return interaction.reply({ content: '🔒 Your voice channel has been **Locked**.', ephemeral: true });
+        } 
+        if (interaction.customId === 'vc_unlock') {
+            await voiceChannel.permissionOverwrites.create(interaction.guild.roles.everyone, { Connect: true });
+            return interaction.reply({ content: '🔓 Your voice channel has been **Unlocked**.', ephemeral: true });
+        } 
+        if (interaction.customId === 'vc_rename') {
+            return interaction.reply({ content: 'ℹ️ Use the command `.v name [New Name]` in chat to quickly change your room name!', ephemeral: true });
+        } 
+        if (interaction.customId === 'vc_limit') {
+            return interaction.reply({ content: 'ℹ️ Use the command `.v limit [Number]` in chat to set player slots!', ephemeral: true });
+        }
+    } catch (err) {
+        console.error(err);
+        return interaction.reply({ content: '❌ Failed to execute permission change. Check bot role hierarchy.', ephemeral: true });
+    }
+});
+
+// ================= DYNAMIC VOICE CHANNEL CREATOR + EMBED INTERFACE =================
 client.on('voiceStateUpdate', async (oldState, newState) => {
     const { guild, member } = newState;
     
-    // ?? REPLACE THESE placeholders with your actual numeric Discord IDs
-    const SETUP_CHANNEL_ID = '1561765624332689592'; 
-    const CATEGORY_ID = '1561765456698810378'; 
+    // ⚠️ REPLACE THESE strings below with your actual numerical Discord IDs
+    const SETUP_CHANNEL_ID = 'YOUR_JOIN_TO_CREATE_CHANNEL_ID'; 
+    const CATEGORY_ID = 'YOUR_CATEGORY_ID'; 
 
     if (newState.channelId === SETUP_CHANNEL_ID) {
         try {

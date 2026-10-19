@@ -196,7 +196,7 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
     if (newState.channelId === SETUP_CHANNEL_ID) {
         try {
             const channel = await guild.channels.create({
-                name: `?? | ${member.displayName}'s Room`,
+                name: `[V] ${member.displayName}'s Room`,
                 type: 2, 
                 parent: CATEGORY_ID,
                 permissionOverwrites: [

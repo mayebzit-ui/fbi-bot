@@ -28,9 +28,16 @@ const CATEGORY_ID = '1561765456698810378';        // The category where temp cha
 
 // Stores the owner ID and text channel ID for each temp channel
 const tempChannels = new Map(); 
+// Prevents the bot from creating multiple channels if a user joins/leaves quickly
+const creationCooldown = new Set();
 
 client.once('ready', () => {
     console.log(`Logged in as ${client.user.tag}!`);
+});
+
+// Catch global errors so the bot NEVER crashes
+process.on('unhandledRejection', error => {
+    console.error('Unhandled promise rejection:', error);
 });
 
 // --- 🎙️ TEMP VOICE SYSTEM (Join/Leave) ---
@@ -39,7 +46,13 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
     if (!member || member.user.bot) return;
 
     // 1. User joins the Trigger Channel
-    if (newState.channelId === TRIGGER_CHANNEL_ID) {
+    if (newState.channelId === TRIGGER_CHANNEL_ID && oldState.channelId !== TRIGGER_CHANNEL_ID) {
+        
+        // Prevent spam if they join/leave too fast
+        if (creationCooldown.has(member.id)) return;
+        creationCooldown.add(member.id);
+        setTimeout(() => creationCooldown.delete(member.id), 5000);
+
         try {
             // Create the Voice Channel
             const newVoiceChannel = await newState.guild.channels.create({
@@ -81,7 +94,7 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
 
             await sendControlPanel(newTextChannel, member, newVoiceChannel);
         } catch (error) {
-            console.error("Error creating temp channels:", error);
+            console.error("Error creating temp channels (Check Bot Permissions):", error);
         }
     }
 
@@ -92,15 +105,19 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
 
         if (channelData && channel.members.size === 0) {
             setTimeout(async () => {
-                const fetchedVoice = channel.guild.channels.cache.get(channel.id);
-                if (fetchedVoice && fetchedVoice.members.size === 0) {
-                    // Delete Voice Channel
-                    await fetchedVoice.delete().catch(console.error);
-                    // Delete Text Channel
-                    const textChannel = channel.guild.channels.cache.get(channelData.textChannelId);
-                    if (textChannel) await textChannel.delete().catch(console.error);
-                    
-                    tempChannels.delete(channel.id);
+                try {
+                    const fetchedVoice = channel.guild.channels.cache.get(channel.id);
+                    if (fetchedVoice && fetchedVoice.members.size === 0) {
+                        // Delete Voice Channel
+                        await fetchedVoice.delete().catch(() => {});
+                        // Delete Text Channel
+                        const textChannel = channel.guild.channels.cache.get(channelData.textChannelId);
+                        if (textChannel) await textChannel.delete().catch(() => {});
+                        
+                        tempChannels.delete(channel.id);
+                    }
+                } catch (err) {
+                    console.error("Error deleting empty channels:", err);
                 }
             }, 3000);
         }
@@ -111,106 +128,51 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
 client.on('messageCreate', async message => {
     if (message.author.bot) return;
 
-    // Avatar command
-    if (message.content === 'a' || message.content.startsWith('a ')) {
-        const target = message.mentions.users.first() || message.author;
-        const embed = new EmbedBuilder()
-            .setTitle(`${target.username}'s Avatar`)
-            .setImage(target.displayAvatarURL({ size: 1024, forceStatic: false }))
-            .setColor(0x3498db);
-        message.channel.send({ embeds: [embed] });
-    }
-
-    // Banner command
-    if (message.content === 'b' || message.content.startsWith('b ')) {
-        const target = message.mentions.users.first() || message.author;
-        const fetchedUser = await target.fetch();
-        const bannerUrl = fetchedUser.bannerURL({ size: 1024 });
-        if (bannerUrl) {
+    try {
+        // Avatar command
+        if (message.content === 'a' || message.content.startsWith('a ')) {
+            const target = message.mentions.users.first() || message.author;
             const embed = new EmbedBuilder()
-                .setTitle(`${fetchedUser.username}'s Banner`)
-                .setImage(bannerUrl)
+                .setTitle(`${target.username}'s Avatar`)
+                .setImage(target.displayAvatarURL({ size: 1024, forceStatic: false }))
                 .setColor(0x3498db);
             message.channel.send({ embeds: [embed] });
-        } else {
-            message.channel.send(`${fetchedUser.username} doesn't have a banner (needs Discord Nitro)`);
         }
-    }
 
-    // Move command
-    if (message.content.startsWith('Aji ')) {
-        const target = message.mentions.members.first();
-        const channelMention = message.mentions.channels.first();
+        // Banner command
+        if (message.content === 'b' || message.content.startsWith('b ')) {
+            const target = message.mentions.users.first() || message.author;
+            const fetchedUser = await target.fetch();
+            const bannerUrl = fetchedUser.bannerURL({ size: 1024 });
+            if (bannerUrl) {
+                const embed = new EmbedBuilder()
+                    .setTitle(`${fetchedUser.username}'s Banner`)
+                    .setImage(bannerUrl)
+                    .setColor(0x3498db);
+                message.channel.send({ embeds: [embed] });
+            } else {
+                message.channel.send(`${fetchedUser.username} doesn't have a banner (needs Discord Nitro)`);
+            }
+        }
 
-        if (!target) return message.channel.send('Usage: `Aji @user` or `Aji @user #channel`');
-        if (!target.voice) return message.channel.send(`${target.user.username} is not in a voice channel.`);
+        // Move command
+        if (message.content.startsWith('Aji ')) {
+            const target = message.mentions.members.first();
+            const channelMention = message.mentions.channels.first();
 
-        let destination = channelMention;
-        if (!destination) destination = message.member.voice ? message.member.voice.channel : null;
-        if (!destination) return message.channel.send('Either tag a voice channel with `#` or join a voice channel first.');
-        if (destination.type !== 2) return message.channel.send('That\'s not a voice channel.');
+            if (!target) return message.channel.send('Usage: `Aji @user` or `Aji @user #channel`');
+            if (!target.voice) return message.channel.send(`${target.user.username} is not in a voice channel.`);
 
-        try {
+            let destination = channelMention;
+            if (!destination) destination = message.member.voice ? message.member.voice.channel : null;
+            if (!destination) return message.channel.send('Either tag a voice channel with `#` or join a voice channel first.');
+            if (destination.type !== 2) return message.channel.send('That\'s not a voice channel.');
+
             await target.voice.setChannel(destination);
             message.channel.send(`Moved ${target.user.username} to **${destination.name}** ✅`);
-        } catch {
-            message.channel.send('I don\'t have permission to move them.');
         }
-    }
-
-    // --- 🆕 TEMP VOICE COMMANDS (.v) ---
-    if (message.content.startsWith('.v')) {
-        const args = message.content.slice(2).trim().split(/ +/);
-        const command = args.shift().toLowerCase();
-        const voiceChannel = message.member.voice.channel;
-
-        if (!voiceChannel) return message.reply("❌ You must be in a voice channel.");
-        
-        const channelData = tempChannels.get(voiceChannel.id);
-        if (!channelData || channelData.ownerId !== message.author.id) {
-            return message.reply("❌ You are not the owner of this temporary channel.");
-        }
-
-        switch (command) {
-            case 'lock':
-                await voiceChannel.permissionOverwrites.edit(message.guild.id, { Connect: false });
-                await message.reply("🔒 Channel locked.");
-                break;
-            case 'unlock':
-                await voiceChannel.permissionOverwrites.edit(message.guild.id, { Connect: true });
-                await message.reply("🔓 Channel unlocked.");
-                break;
-            case 'name':
-                const newName = args.join(' ');
-                if (!newName) return message.reply("❌ Please provide a name.");
-                await voiceChannel.setName(newName);
-                await message.reply(`✏️ Channel renamed to **${newName}**.`);
-                break;
-            case 'limit':
-                const limit = parseInt(args[0]);
-                if (isNaN(limit) || limit < 0 || limit > 99) return message.reply("❌ Please provide a number between 0 and 99.");
-                await voiceChannel.setUserLimit(limit);
-                await message.reply(`👥 User limit set to **${limit}**.`);
-                break;
-            case 'reject':
-                const targetUser = message.mentions.members.first();
-                if (!targetUser) return message.reply("❌ Mention a user to reject.");
-                await voiceChannel.permissionOverwrites.edit(targetUser.id, { Connect: false });
-                if (targetUser.voice.channelId === voiceChannel.id) await targetUser.voice.disconnect();
-                await message.reply(`🚫 Rejected **${targetUser.user.username}**.`);
-                break;
-            case 'permit':
-                const permitUser = message.mentions.members.first();
-                if (!permitUser) return message.reply("❌ Mention a user to permit.");
-                await voiceChannel.permissionOverwrites.edit(permitUser.id, { Connect: true });
-                // Also give them access to the text channel
-                const textChan = message.guild.channels.cache.get(channelData.textChannelId);
-                if (textChan) await textChan.permissionOverwrites.edit(permitUser.id, { ViewChannel: true });
-                await message.reply(`✅ Permitted **${permitUser.user.username}**.`);
-                break;
-            default:
-                message.reply("❌ Unknown command.");
-        }
+    } catch (err) {
+        console.error("Command Error:", err);
     }
 });
 
@@ -247,27 +209,31 @@ async function sendControlPanel(textChannel, member, voiceChannel) {
 client.on('interactionCreate', async interaction => {
     if (!interaction.isButton()) return;
 
-    const voiceChannel = interaction.member.voice.channel;
-    if (!voiceChannel) return interaction.reply({ content: '❌ You must be in a voice channel.', ephemeral: true });
+    try {
+        const voiceChannel = interaction.member.voice.channel;
+        if (!voiceChannel) return interaction.reply({ content: '❌ You must be in a voice channel.', ephemeral: true });
 
-    const channelData = tempChannels.get(voiceChannel.id);
-    if (!channelData || channelData.ownerId !== interaction.user.id) {
-        return interaction.reply({ content: '❌ You are not the owner of this channel.', ephemeral: true });
-    }
+        const channelData = tempChannels.get(voiceChannel.id);
+        if (!channelData || channelData.ownerId !== interaction.user.id) {
+            return interaction.reply({ content: '❌ You are not the owner of this channel.', ephemeral: true });
+        }
 
-    if (interaction.customId === 'vc_lock') {
-        await voiceChannel.permissionOverwrites.edit(interaction.guild.id, { Connect: false });
-        await interaction.reply({ content: '🔒 Channel locked.', ephemeral: true });
-    }
-    if (interaction.customId === 'vc_unlock') {
-        await voiceChannel.permissionOverwrites.edit(interaction.guild.id, { Connect: true });
-        await interaction.reply({ content: '🔓 Channel unlocked.', ephemeral: true });
-    }
-    if (interaction.customId === 'vc_rename') {
-        await interaction.reply({ content: '✏️ Type `.v name [New Name]` in chat to rename.', ephemeral: true });
-    }
-    if (interaction.customId === 'vc_limit') {
-        await interaction.reply({ content: '👥 Type `.v limit [Number]` in chat to set a limit.', ephemeral: true });
+        if (interaction.customId === 'vc_lock') {
+            await voiceChannel.permissionOverwrites.edit(interaction.guild.id, { Connect: false });
+            await interaction.reply({ content: '🔒 Channel locked.', ephemeral: true });
+        }
+        if (interaction.customId === 'vc_unlock') {
+            await voiceChannel.permissionOverwrites.edit(interaction.guild.id, { Connect: true });
+            await interaction.reply({ content: '🔓 Channel unlocked.', ephemeral: true });
+        }
+        if (interaction.customId === 'vc_rename') {
+            await interaction.reply({ content: '✏️ Please reply to this message with the new name for your channel.', ephemeral: true });
+        }
+        if (interaction.customId === 'vc_limit') {
+            await interaction.reply({ content: '👥 Please reply to this message with a number (0-99) for the user limit.', ephemeral: true });
+        }
+    } catch (err) {
+        console.error("Button Error:", err);
     }
 });
 

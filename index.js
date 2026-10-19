@@ -24,7 +24,6 @@ const client = new Client({
 // ==========================================
 const TRIGGER_CHANNEL_ID = '1561765624332689592'; // The voice channel users join to create a temp channel
 const CATEGORY_ID = '1561765456698810378';        // The category where temp channels are created
-const CONTROL_TEXT_CHANNEL_ID = '1561765624332689592'; // The text channel where the panel will show up
 // ==========================================
 
 // Stores the owner ID for each temp channel
@@ -39,7 +38,7 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
     const member = newState.member;
     if (!member || member.user.bot) return;
 
-    // 1. User joins the Trigger Channel to create a new one
+    // 1. User joins the Trigger Channel
     if (newState.channelId === TRIGGER_CHANNEL_ID) {
         try {
             const newChannel = await newState.guild.channels.create({
@@ -61,8 +60,8 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
             await member.voice.setChannel(newChannel);
             tempChannels.set(newChannel.id, member.id);
 
-            // Send the Control Panel
-            await sendControlPanel(newChannel);
+            // Send the Beautiful Control Panel via DM
+            await sendControlPanel(newChannel, member);
         } catch (error) {
             console.error("Error creating temp channel:", error);
         }
@@ -217,8 +216,8 @@ client.on('messageCreate', async message => {
     }
 });
 
-// --- 🎨 BEAUTIFUL PANEL CREATOR ---
-async function sendControlPanel(voiceChannel) {
+// --- 🎨 BEAUTIFUL PANEL CREATOR (SENDS VIA DM) ---
+async function sendControlPanel(voiceChannel, member) {
     const embed = new EmbedBuilder()
         .setColor('#ff0000') 
         .setTitle('🔥 ⇝ Bienvenido, <3')
@@ -240,17 +239,14 @@ async function sendControlPanel(voiceChannel) {
     );
 
     try {
-        // Sends the panel to the specific text channel you chose
-        const textChannel = await voiceChannel.guild.channels.fetch(CONTROL_TEXT_CHANNEL_ID);
-        if (textChannel) {
-            await textChannel.send({ 
-                content: `👋 <@${tempChannels.get(voiceChannel.id)}>, here is your control panel for **${voiceChannel.name}**!`, 
-                embeds: [embed], 
-                components: [row] 
-            });
-        }
+        // Sends the panel directly to the user's DMs
+        await member.send({ 
+            content: `👋 Here is your control panel for **${voiceChannel.name}**!`, 
+            embeds: [embed], 
+            components: [row] 
+        });
     } catch (error) {
-        console.error("Could not find the control text channel. Check the ID!", error);
+        console.error("Could not DM the user. They might have DMs disabled.");
     }
 }
 

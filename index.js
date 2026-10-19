@@ -22,83 +22,67 @@ const client = new Client({
 // ==========================================
 // ⚠️ REPLACE THESE WITH YOUR ACTUAL SERVER IDs
 // ==========================================
-const TRIGGER_CHANNEL_ID = '1561765624332689592'; // The voice channel users join to create a temp channel
-const CATEGORY_ID = '1561765456698810378';        // The category where temp channels are created
+const TRIGGER_CHANNEL_ID = '1561765624332689592'; // Voice Channel ID
+const CATEGORY_ID = '1561765456698810378';        // Category ID
 // ==========================================
 
-// Stores the owner ID and text channel ID for each temp channel
 const tempChannels = new Map(); 
-// Prevents the bot from creating multiple channels if a user joins/leaves quickly
 const creationCooldown = new Set();
 
 client.once('ready', () => {
-    console.log(`Logged in as ${client.user.tag}!`);
+    console.log(`✅ Bot is online: ${client.user.tag}`);
+    console.log(`✅ TRIGGER_CHANNEL_ID is set to: ${TRIGGER_CHANNEL_ID}`);
+    console.log(`✅ CATEGORY_ID is set to: ${CATEGORY_ID}`);
 });
 
-// Catch global errors so the bot NEVER crashes
-process.on('unhandledRejection', error => {
-    console.error('Unhandled promise rejection:', error);
-});
-
-// --- 🎙️ TEMP VOICE SYSTEM (Join/Leave) ---
+// --- 🎙️ TEMP VOICE SYSTEM ---
 client.on('voiceStateUpdate', async (oldState, newState) => {
     const member = newState.member;
     if (!member || member.user.bot) return;
 
-    // 1. User joins the Trigger Channel
+    // Log whenever ANYONE moves voice channels
+    if (newState.channelId) {
+        console.log(`[VOICE LOG] ${member.user.tag} joined: ${newState.channel?.name || 'Unknown'} (ID: ${newState.channelId})`);
+    }
+
     if (newState.channelId === TRIGGER_CHANNEL_ID && oldState.channelId !== TRIGGER_CHANNEL_ID) {
+        console.log(`[VOICE] Correct trigger channel detected! Creating room for ${member.user.tag}...`);
         
-        // Prevent spam if they join/leave too fast
         if (creationCooldown.has(member.id)) return;
         creationCooldown.add(member.id);
         setTimeout(() => creationCooldown.delete(member.id), 5000);
 
         try {
-            // Create the Voice Channel
             const newVoiceChannel = await newState.guild.channels.create({
                 name: `🔊 ${member.displayName}'s room`,
                 type: ChannelType.GuildVoice,
                 parent: CATEGORY_ID,
                 permissionOverwrites: [
-                    {
-                        id: newState.guild.id,
-                        allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect],
-                    },
-                    {
-                        id: member.id,
-                        allow: [PermissionFlagsBits.ManageChannels, PermissionFlagsBits.MoveMembers, PermissionFlagsBits.Connect],
-                    },
+                    { id: newState.guild.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect] },
+                    { id: member.id, allow: [PermissionFlagsBits.ManageChannels, PermissionFlagsBits.MoveMembers, PermissionFlagsBits.Connect] },
                 ],
             });
 
-            // Create the Text Channel for the panel
             const newTextChannel = await newState.guild.channels.create({
                 name: `💬-${member.displayName}'s-chat`,
                 type: ChannelType.GuildText,
                 parent: CATEGORY_ID,
                 permissionOverwrites: [
-                    {
-                        id: newState.guild.id,
-                        deny: [PermissionFlagsBits.ViewChannel], // Hidden from everyone by default
-                    },
-                    {
-                        id: member.id,
-                        allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages],
-                    },
+                    { id: newState.guild.id, deny: [PermissionFlagsBits.ViewChannel] },
+                    { id: member.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
                 ],
             });
 
-            // Move user to voice, save data, and send panel
             await member.voice.setChannel(newVoiceChannel);
             tempChannels.set(newVoiceChannel.id, { ownerId: member.id, textChannelId: newTextChannel.id });
 
-            await sendControlPanel(newTextChannel, member, newVoiceChannel);
+            await sendControlPanel(newTextChannel, member);
+            console.log(`[VOICE] Successfully created channels for ${member.user.tag}.`);
         } catch (error) {
-            console.error("Error creating temp channels (Check Bot Permissions):", error);
+            console.error("[VOICE ERROR] Could not create channels. Check bot permissions:", error);
         }
     }
 
-    // 2. Auto-delete channels when empty
     if (oldState.channelId && oldState.channelId !== TRIGGER_CHANNEL_ID) {
         const channel = oldState.channel;
         const channelData = tempChannels.get(channel.id);
@@ -108,16 +92,14 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
                 try {
                     const fetchedVoice = channel.guild.channels.cache.get(channel.id);
                     if (fetchedVoice && fetchedVoice.members.size === 0) {
-                        // Delete Voice Channel
                         await fetchedVoice.delete().catch(() => {});
-                        // Delete Text Channel
                         const textChannel = channel.guild.channels.cache.get(channelData.textChannelId);
                         if (textChannel) await textChannel.delete().catch(() => {});
-                        
                         tempChannels.delete(channel.id);
+                        console.log(`[VOICE] Deleted empty channels.`);
                     }
                 } catch (err) {
-                    console.error("Error deleting empty channels:", err);
+                    console.error("[VOICE ERROR] Could not delete empty channels:", err);
                 }
             }, 3000);
         }
@@ -128,8 +110,12 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
 client.on('messageCreate', async message => {
     if (message.author.bot) return;
 
+    // Log every message so we know the bot sees it
+    if (message.content.startsWith('a') || message.content.startsWith('b') || message.content.startsWith('Aji')) {
+        console.log(`[COMMAND LOG] Received command: ${message.content} from ${message.author.tag}`);
+    }
+
     try {
-        // Avatar command
         if (message.content === 'a' || message.content.startsWith('a ')) {
             const target = message.mentions.users.first() || message.author;
             const embed = new EmbedBuilder()
@@ -139,7 +125,6 @@ client.on('messageCreate', async message => {
             message.channel.send({ embeds: [embed] });
         }
 
-        // Banner command
         if (message.content === 'b' || message.content.startsWith('b ')) {
             const target = message.mentions.users.first() || message.author;
             const fetchedUser = await target.fetch();
@@ -155,7 +140,6 @@ client.on('messageCreate', async message => {
             }
         }
 
-        // Move command
         if (message.content.startsWith('Aji ')) {
             const target = message.mentions.members.first();
             const channelMention = message.mentions.channels.first();
@@ -177,7 +161,7 @@ client.on('messageCreate', async message => {
 });
 
 // --- 🎨 BEAUTIFUL PANEL CREATOR ---
-async function sendControlPanel(textChannel, member, voiceChannel) {
+async function sendControlPanel(textChannel, member) {
     const embed = new EmbedBuilder()
         .setColor('#ff0000') 
         .setTitle('🔥 ⇝ Bienvenido, <3')

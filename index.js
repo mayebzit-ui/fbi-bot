@@ -88,7 +88,7 @@ client.on('messageCreate', async message => {
             const newName = args.join(' ');
             if (!newName) return message.channel.send('Usage: `.v name Gaming Room`');
             try {
-                await voiceChannel.setName(`?? | ${newName}`);
+                await voiceChannel.setName(`🔊 | ${newName}`);
                 return message.channel.send(`? Channel renamed to **?? | ${newName}**`);
             } catch (err) {
                 return message.channel.send('? Failed to rename channel due to Discord rate limits.');
@@ -196,7 +196,7 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
     if (newState.channelId === SETUP_CHANNEL_ID) {
         try {
             const channel = await guild.channels.create({
-                name: `[V] ${member.displayName}'s Room`,
+                name: `🔊 | ${member.displayName}'s Room`,
                 type: 2, 
                 parent: CATEGORY_ID,
                 permissionOverwrites: [
